@@ -64,6 +64,7 @@ def plot_train_valid(history_train_loss, history_validation_loss):
 def handle_missing_values(df):
     """For the time being, just drop all the samples with missing values
     """
+    print("just drop all the samples with missing values, consider a better approach")
     newdf= df.dropna()
     return newdf
 
