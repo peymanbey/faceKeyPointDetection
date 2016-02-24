@@ -4,7 +4,9 @@ from pandas.io.parsers import read_csv
 from sklearn.utils import shuffle
 import theano
 import theano.tensor as T
+import matplotlib.pyplot as plt
 
+# general load and preparing data
 
 def load_data(path, test=False, col=None):
     """ Load the data from path
@@ -78,9 +80,7 @@ def shared_dataset(X,y,borrow=True):
                           borrow=borrow)
     return shared_x, shared_y
 
-
-import matplotlib.pyplot as plt
-
+# reusable classes and functions
 class linear_regresion(object):
     """multi-target linear regression 
     Fully described with weight matrix :math:'W'
@@ -209,3 +209,4 @@ def train_early_stopping(train_model,
                     #one_looping = True
                     break
     return history_train_loss, history_validation_loss
+
