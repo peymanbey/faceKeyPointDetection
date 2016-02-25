@@ -206,6 +206,9 @@ def train_early_stopping(train_model,
                 #                     this_validation_loss 
                 #                 )
                 #             )
+                """ check for improvements in the model and save the best model here
+                now it does  not save the model 
+                """
                 if patience <= iter:
                     #one_looping = True
                     break
