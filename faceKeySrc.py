@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 
 # general load and preparing data
 
+
 def load_data(path, test=False, col=None):
     """ Load the data from path
         by default it assums the training data and
@@ -16,39 +17,37 @@ def load_data(path, test=False, col=None):
     # the Image column is the pixel values separated by space
     # convert the values to numpy array
     df['Image'] = df['Image'].apply(lambda im: numpy.fromstring(im, sep=' '))
-    
+
     # if you want only a subset of columns, passed as col to input
     if col:
         df = df[list(col)+['Image']]
-    
+
     # some key-points have missing values
     # deal with them in handle_missing
     # print(df.count())
     df = handle_missing_values(df)
     # print(df.count())
-    
-    # the Image column contains pixel values 
+    # the Image column contains pixel values
     # it is a list separated by space
     # convert it into numpy array using np.vstack
     # also scale them to [0, 1]
     X = numpy.vstack(df['Image'].values) / 255.
-    
     # convert values to float32
     X = X.astype(numpy.float32)
-    
     # for training data, manipulate target values
     # scale the target values
     # shuffle data
     # Convert it to float 32
-    if not test:# only train data has y columns
+    if not test:  # only train data has y columns
         Y = df[df.columns[:-1]].values
         Y = (Y - 48) / 48  # scale target coordinates to [-1, 1]
-        X, Y = shuffle(X, Y, random_state =54)  # shuffle train data
+        X, Y = shuffle(X, Y, random_state=54)  # shuffle train data
         Y = Y.astype(numpy.float32)
     else:
         Y = None
 
     return X, Y
+
 
 def handle_missing_values(df):
     """For the time being, just drop all the samples with missing values
