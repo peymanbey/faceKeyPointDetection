@@ -1,0 +1,38 @@
+""" Kaggle Face Key Points data for learning CNNs.
+ This code is based on various tutorials to design and train a CNN for facilal
+ key point recognition.
+ """
+
+"""
+ All tasks:
+     1. DONE Read the training data and transform it to numpy
+     2. Do pre-processing and generate multiple versions of data:
+          a. DONE Exclude samples with missing values
+          b. DONE Center the data, note different centering of alexnet and VGG
+          c. Missing value imputation
+          d. Multi-label handling of missing values
+          e. Augment the training images by
+                i. Flipping around the vertical axis
+                ii. Shifting up, down, left, right?
+                iii. What else? Search for it
+          f. Cluster instances, in terms of their annotation type.
+          Apparently two different protocol has been used for annotation.
+          Maybe using a different estimator for each would help to improve.
+     3. Choose a CNN model, something that is available in pretrained format
+     and use it as feature selector. then:
+            a. Apply linear model on the extracted features
+            b. Apply random forest on the extracted features
+            c. Apply XGBoost on extracted features
+            d. Fine tune the model to your data
+                i. Use RELU
+                ii. Use leaky-RELU with trainable parameter
+                iii.Batch normalisation
+     4. Write the script to predict and generate the submission file
+     5. Track the leader board score for each combination of pre-processing
+     and estimator
+ """
+
+# TODO: 2. Implement 4 from "All tasks"
+# TODO: 3. Implement 5 from "All tasks"
+# TODO: 4. Implement Batch Normalisation
+# TODO: 5. Check if proper initialization is used for RELU units, it is extension of Xavier
