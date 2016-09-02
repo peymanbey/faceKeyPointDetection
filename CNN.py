@@ -12,6 +12,7 @@ from lasagne.nonlinearities import rectify, identity
 from lasagne.objectives import squared_error
 from lasagne.regularization import regularize_network_params, l2
 from lasagne.updates import rmsprop, adagrad, nesterov_momentum
+import cPickle as pickle
 
 def build_update_functions(train_set_x,train_set_y,
                            valid_set_x,valid_set_y,
@@ -78,10 +79,11 @@ def build_update_functions(train_set_x,train_set_y,
 
 
 def build_model_vanila_CNN(X, stride=1):
+
     conv1filters = 64
-    conv2filters = 128
+    conv2filters = 64
     conv3filters = 128
-    conv4filters = 256
+    conv4filters = 64
     net = {}
     net['input'] = InputLayer((None, 1, 96, 96), input_var=X)
 
@@ -164,6 +166,110 @@ def build_model_vanila_CNN(X, stride=1):
     net['prob'] = NonlinearityLayer(net['fc4'], nonlinearity=identity)
     return net
 
+def early_stop_train(train_set_x,train_set_y,
+                     valid_set_x,valid_set_y,
+                     network,train_fn,val_fn):
+    """Get the network and update functions as input and apply early stop training.
+    Should return a trained network with training history.
+    ----------------------
+    Input
+    ----------------------
+    train_set_x: Training samples, loaded to GPU by theano.shared()
+    valid_set_x: Test samples, loaded to GPU by theano.shared()
+    train_set_y: Training outputs, loaded to GPU by theano.shared()
+    valid_set_y: Training outputs, loaded to GPU by theano.shared()
+    network: Deep model, the output layer of the network build using lasagne
+    train_fn: theano.function to update the network
+    val_fn: theano.function to calculate validation loss
+    ----------------------
+    Outputs
+    ----------------------
+    train_loss_history
+    val_loss_history_
+    network
+    ----------------------
+    """
+    # network parameters
+    n_iter = 20000
+    improvement_threshold = 0.995
+    patience = 20000
+    batch_size = 128
+    n_train_batches = train_set_x.get_value(borrow=True).shape[0] // batch_size + 1
+    n_valid_batches = valid_set_x.get_value(borrow=True).shape[0] // batch_size + 1
+    patience_increase = 2
+    validation_frequency = min(n_train_batches, patience // 10)
+    train_loss_history_temp = []
+    best_val_loss_ = np.inf
+    best_epoch_ = 0
+    epoch = 0
+    done_looping = False
+    train_loss_history_ = []
+    val_loss_history_ = []
+
+    print 'start training'
+    start_time = time.time()
+    while (epoch < n_iter) and (not done_looping):
+        epoch += 1
+
+         # go over mini-batches for a full epoch
+        for minibatch_index in range(n_train_batches):
+
+            # update network for one mini-batch
+            minibatch_average_cost, minibatch_average_RMSE = train_fn(minibatch_index)
+
+            # store training loss of mini-batches till the next validation step
+            train_loss_history_temp.append(minibatch_average_RMSE)
+
+            # number of mini-batches checked
+            num_minibatch_checked = (epoch - 1) * n_train_batches + minibatch_index
+
+            # if validation interval reached
+            if (num_minibatch_checked + 1) % validation_frequency == 0:
+
+                # compute validation loss
+                validation_losses = [val_fn(i)[0] for i in range(n_valid_batches)]
+
+                # store mean validation loss for validation set
+                current_val_loss = np.mean(validation_losses)
+
+                # store training and validation history
+                train_loss_history_.append(np.mean(train_loss_history_temp))
+                val_loss_history_.append(current_val_loss)
+                train_loss_history_temp = []
+
+                # is it the best validation loss so far?
+                if current_val_loss < best_val_loss_:
+
+                    # increase patience if improvement is significant
+                    if (current_val_loss < best_val_loss_ * improvement_threshold):
+                        patience = max(patience, num_minibatch_checked * patience_increase)
+
+                    # save the-so-far-best validation RMSE and epoch and model-params
+                    best_val_loss_ = current_val_loss
+                    best_epoch_ = epoch
+                    best_network_params = get_all_param_values(network)
+                    # TODO: save the best model as pickle file
+                    pickle.dump([best_network_params,best_val_loss_,best_epoch_],
+                                open("results.p", "wb"))
+
+            # check if patience exceeded and set the training loop to stop
+            if (patience <= num_minibatch_checked):
+                print 'patience reached'
+                # reset the network weights to the best params saved
+                print 'reseting the network params to that of the best seen'
+                reinitiate_set_params(network=network,
+                                      weights=best_network_params)
+                # done optimising, break the optimisation loop
+                done_looping = True
+                break
+
+        freq = 10
+        if (epoch % freq) == 0:
+            print (('epoch %i, minibatch %i/%i, validation loss of %f, patience %i, in %f secs') %
+                   (epoch, minibatch_index + 1, n_train_batches, current_val_loss, patience, time.time() - start_time))
+            start_time = time.time()
+
+    return 0
 
 if __name__ == "__main__":
     # path to train and testing data
@@ -176,8 +282,10 @@ if __name__ == "__main__":
     print 'drop missing values'
     data.drop_missing_values()
     # center data VGG style
-    print 'center alexnet'
-    data.center_alexnet()
+    # print 'center alexnet'
+    # data.center_alexnet()
+    print 'center VGG'
+    data.center_VGG()
     # generate test validation split
     train_set_x, valid_set_x, train_set_y, valid_set_y = train_test_split(
         data.X, data.y, test_size=0.2, random_state=42)
@@ -200,94 +308,7 @@ if __name__ == "__main__":
                                               y, X)
     print 'compile done successfully'
 
-    # train the network parameters
-    n_iter = 10000
-    improvement_threshold = 0.999
-    patience = 10000
-    max_fail = 10
-    #######################
-    batch_size = 128
-    n_train_batches = train_set_x.get_value(borrow=True).shape[0] // batch_size + 1
-    n_valid_batches = valid_set_x.get_value(borrow=True).shape[0] // batch_size + 1
-    patience_increase = .2
-    validation_frequency = min(n_train_batches, patience // 10)
-    best_val_loss_ = np.inf
-    train_loss_history_temp = []
-    ########################
-    n_fail_ = 0
-    best_val_loss_ = np.inf
-    best_epoch_ = 0
-    epoch = 0
-    done_looping = False
-    train_loss_history_ = []
-    val_loss_history_ = []
-
-    print 'start training'
-
-    start_time = time.time()
-    while (epoch < n_iter) and (not done_looping):
-        epoch += 1
-
-        # go over minibatches
-        for minibatch_index in range(n_train_batches):
-
-            # update network for one minibatch
-            minibatch_average_cost, minibatch_average_RMSE = train_fn(minibatch_index)
-
-            # store training loss of minibatches till the next validation step
-            train_loss_history_temp.append(minibatch_average_RMSE)
-
-            # number of minibatches checked
-            num_minibatch_checked = (epoch - 1) * n_train_batches + minibatch_index
-
-            # if validation interval reached
-            if (num_minibatch_checked + 1) % validation_frequency == 0:
-
-                # compute validation loss
-                validation_losses = [val_fn(i)[0] for i in range(n_valid_batches)]
-
-                # store mean validation loss for validation set
-                current_val_loss = np.mean(validation_losses)
-
-                # store training and validation history
-                train_loss_history_.append(np.mean(train_loss_history_temp))
-                val_loss_history_.append(current_val_loss)
-                train_loss_history_temp = []
-
-                # is it the best validation loss sofar?
-                if current_val_loss < best_val_loss_:
-
-                    # increase patience if improvement is significant
-                    if (current_val_loss < best_val_loss_ * improvement_threshold):
-                        patience = max(patience, num_minibatch_checked * patience_increase)
-
-                    # save the-sofar-best validation RMSE and epoch and model-params
-                    best_val_loss_ = current_val_loss
-                    best_epoch_ = epoch
-                    best_network_params = get_all_param_values(network)
-
-            # check if patience exceeded and set the training loop to stop
-            if (patience <= num_minibatch_checked):
-                print 'patience reached'
-                # reset the network weights to the best params saved
-                print 'reseting the network params to that of the best seen'
-                reinitiate_set_params(network=network,
-                                      weights=best_network_params)
-                # done optimising, break the optimisation loop
-                done_looping = True
-                break
-
-                # print out results of optimising priodically
-                #     if num_minibatch_checked<1000:
-                #         freq = 200
-                #     elif num_minibatch_checked<5000:
-                #         freq = 500
-                #     elif num_minibatch_checked<10000:
-                #         freq = 1000
-        freq = 10
-
-        if (epoch % freq) == 0:
-            print (('epoch %i, minibatch %i/%i, validation loss of %f, patience %i, in %f secs') %
-                   (epoch, minibatch_index + 1, n_train_batches, current_val_loss, patience, time.time() - start_time))
-            start_time = time.time()
-
+    # call early_stop_train function
+    early_stop_train(train_set_x, train_set_y,
+                     valid_set_x, valid_set_y,
+                     network, train_fn, val_fn)
