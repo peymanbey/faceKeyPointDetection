@@ -117,3 +117,71 @@ def shared_dataset(X,y,borrow=True):
                                         dtype=theano.config.floatX),
                           borrow=borrow)
     return shared_x, shared_y
+
+def build_update_functions(train_set_x, train_set_y,
+                           valid_set_x, valid_set_y,
+                           network,
+                           y, X,
+                           batch_size=32,
+                           l2_reg=.01,
+                           learning_rate=.005,
+                           momentum=.9):
+
+
+    # build update functions
+    #####################################
+    # extract tensor representing the network predictions
+    prediction = get_output(network)
+    loss_RMSE = 0
+    # collect squared error
+    loss_RMSE = squared_error(prediction, y)
+    # compute the root mean squared errror
+    loss_RMSE = loss_RMSE.mean().sqrt()
+    # add l2 regularization
+    l2_penalty = regularize_network_params(network, l2)
+    loss = (1 - l2_reg) * loss_RMSE + l2_reg * l2_penalty
+    # get network params
+    params = get_all_params(network)
+
+    #     # create update criterion
+    #     print('nestrov')
+    #     updates = nesterov_momentum(
+    #         loss, params, learning_rate=learning_rate, momentum=momentum)
+
+    #     print('AdaGrad')
+    #     updates = adagrad(loss, params,learning_rate= 1e-3)
+
+    print('RMSPROP')
+    updates = rmsprop(loss, params, learning_rate=1e-3)
+    # create validation/test loss expression
+    # the loss represents the loss for all the lables
+    test_prediction = get_output(network,
+                                 deterministic=True)
+    # collect squared error
+    test_loss = squared_error(test_prediction,
+                              y)
+    # compute the root mean squared errror
+    test_loss = test_loss.mean().sqrt()
+    #     test_loss_withl2 = (1-l2_reg) * test_loss + l2_reg * l2_penalty
+
+    # index for minibatch slicing
+    index = T.lscalar()
+
+    # training function
+    train_set_x_size = train_set_x.get_value().shape[0]
+    val_set_x_size = valid_set_x.get_value().shape[0]
+
+    train_fn = theano.function(inputs=[index],
+                               outputs=[loss, loss_RMSE],
+                               updates=updates,
+                               givens={X: train_set_x[
+                                          index * batch_size: T.minimum((index + 1) * batch_size, train_set_x_size)],
+                                       y: train_set_y[
+                                          index * batch_size: T.minimum((index + 1) * batch_size, train_set_x_size)]})
+    # validation function
+    val_fn = theano.function(inputs=[index],
+                             outputs=[test_loss, prediction],
+                             givens={
+                                 X: valid_set_x[index * batch_size: T.minimum((index + 1) * batch_size, val_set_x_size)],
+                                 y: valid_set_y[index * batch_size: T.minimum((index + 1) * batch_size, val_set_x_size)]})
+    return train_fn, val_fn

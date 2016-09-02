@@ -9,13 +9,12 @@
      2. Do pre-processing and generate multiple versions of data:
           a. DONE Exclude samples with missing values
           b. DONE Center the data, note different centering of alexnet and VGG
-          c. Missing value imputation
-          d. Multi-label handling of missing values
-          e. Augment the training images by
+          c. DONE Multi-label handling of missing values
+          d. Augment the training images by
                 i. Flipping around the vertical axis
                 ii. Shifting up, down, left, right?
                 iii. What else? Search for it
-          f. Cluster instances, in terms of their annotation type.
+          e. Cluster instances, in terms of their annotation type.
           Apparently two different protocol has been used for annotation.
           Maybe using a different estimator for each would help to improve.
      3. Choose a CNN model, something that is available in pretrained format
