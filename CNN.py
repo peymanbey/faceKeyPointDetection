@@ -4,15 +4,16 @@ from sklearn.cross_validation import train_test_split
 import numpy as np
 import theano
 import theano.tensor as T
-from lasagne.layers import InputLayer, DenseLayer, NonlinearityLayer
+from lasagne.layers import InputLayer, DenseLayer, NonlinearityLayer, DropoutLayer, batch_norm
 from lasagne.layers import  get_output,get_all_params,get_all_param_values, set_all_param_values
 from lasagne.layers import Pool2DLayer as PoolLayer
 from lasagne.layers.dnn import Conv2DDNNLayer as ConvLayer
-from lasagne.nonlinearities import leaky_rectify, identity
+from lasagne.nonlinearities import identity, rectify
 from lasagne.objectives import squared_error, aggregate
 from lasagne.regularization import regularize_network_params, l2
 from lasagne.updates import rmsprop, adagrad, nesterov_momentum
 import cPickle as pickle
+
 
 def build_update_functions(train_set_x,train_set_y,
                            valid_set_x,valid_set_y,
@@ -114,17 +115,29 @@ def build_update_functions(train_set_x,train_set_y,
     return train_fn,val_fn
 
 
+def single_conv_layer(input_layer, **kwargs):
+
+    complex_layer = ConvLayer(incoming=input_layer,**kwargs)
+    complex_layer = PoolLayer(complex_layer, pool_size=2, stride=2)
+    batch_norm(complex_layer,epsilon=0.001)
+
+    return complex_layer
+
+
 def build_model_vanila_CNN(X, stride=1):
 
     conv1filters = 64
     conv2filters = 128
-    conv3filters = 256
-    conv4filters = 128
+    conv3filters = 384
+    conv4filters = 256
+
     net = {}
-    non_linear_function = leaky_rectify
+    non_linear_function = rectify
+
+
     net['input'] = InputLayer((None, 1, 96, 96), input_var=X)
 
-    net['conv1_1'] = ConvLayer(incoming=net['input'],
+    net['conv1'] = single_conv_layer(net['input'],
                                num_filters=conv1filters,
                                filter_size=3,
                                stride=stride,
@@ -132,17 +145,7 @@ def build_model_vanila_CNN(X, stride=1):
                                nonlinearity=non_linear_function,
                                flip_filters=False)
 
-    net['conv1_2'] = ConvLayer(incoming=net['conv1_1'],
-                               num_filters=conv1filters,
-                               filter_size=3,
-                               stride=stride,
-                               pad=1,
-                               nonlinearity=non_linear_function,
-                               flip_filters=False)
-
-    net['pool1'] = PoolLayer(net['conv1_2'], pool_size=2, stride=2)
-
-    net['conv2_1'] = ConvLayer(incoming=net['pool1'],
+    net['conv2'] = single_conv_layer(net['conv1'],
                                num_filters=conv2filters,
                                filter_size=3,
                                stride=stride,
@@ -150,74 +153,47 @@ def build_model_vanila_CNN(X, stride=1):
                                nonlinearity=non_linear_function,
                                flip_filters=False)
 
-    net['conv2_2'] = ConvLayer(incoming=net['conv2_1'],
-                               num_filters=conv2filters,
-                               filter_size=3,
-                               stride=stride,
-                               pad=1,
-                               nonlinearity=non_linear_function,
-                               flip_filters=False)
+    net['conv3'] = single_conv_layer(net['conv2'],
+                                     num_filters=conv3filters,
+                                     filter_size=3,
+                                     stride=stride,
+                                     pad=1,
+                                     nonlinearity=non_linear_function,
+                                     flip_filters=False)
 
-    net['pool2'] = PoolLayer(net['conv2_2'], pool_size=2, stride=2)
+    net['conv4'] = single_conv_layer(net['conv3'],
+                                     num_filters=conv4filters,
+                                     filter_size=3,
+                                     stride=stride,
+                                     pad=1,
+                                     nonlinearity=non_linear_function,
+                                     flip_filters=False)
 
-    net['conv3_1'] = ConvLayer(incoming=net['pool2'],
-                               num_filters=conv3filters,
-                               filter_size=3,
-                               stride=stride,
-                               pad=1,
-                               nonlinearity=non_linear_function,
-                               flip_filters=False)
+    net['fc5'] = DenseLayer(net['conv4'], num_units=256, nonlinearity=non_linear_function)
+    net['fc5_dropout'] = DropoutLayer(net['fc5'], p=0.2)
 
+    net['fc6'] = DenseLayer(net['fc5_dropout'], num_units=30, nonlinearity=non_linear_function)
 
-    net['conv3_2'] = ConvLayer(incoming=net['conv3_1'],
-                               num_filters=conv3filters,
-                               filter_size=3,
-                               stride=stride,
-                               pad=1,
-                               nonlinearity=non_linear_function,
-                               flip_filters=False)
+    net['prob'] = NonlinearityLayer(net['fc6'], nonlinearity=identity)
 
-    net['pool3'] = PoolLayer(net['conv3_2'], pool_size=2, stride=2)
-
-    net['conv4_1'] = ConvLayer(incoming=net['pool3'],
-                               num_filters=conv4filters,
-                               filter_size=3,
-                               stride=stride,
-                               pad=1,
-                               nonlinearity=non_linear_function,
-                               flip_filters=False)
-
-
-    net['conv4_2'] = ConvLayer(incoming=net['conv4_1'],
-                               num_filters=conv4filters,
-                               filter_size=3,
-                               stride=stride,
-                               pad=1,
-                               nonlinearity=non_linear_function,
-                               flip_filters=False)
-
-    net['pool4'] = PoolLayer(net['conv4_2'], pool_size=2, stride=2)
-
-    # net['fc3'] = DenseLayer(net['pool4'], num_units=256, nonlinearity=non_linear_function)
-    net['fc4'] = DenseLayer(net['pool4'], num_units=30, nonlinearity=non_linear_function)
-    net['prob'] = NonlinearityLayer(net['fc4'], nonlinearity=identity)
     return net
+
 
 def early_stop_train(train_set_x,train_set_y,
                      valid_set_x,valid_set_y,
-                     network,train_fn,val_fn):
+                     network,train_fn,val_fn,batch_size = 32):
     """Get the network and update functions as input and apply early stop training.
     Should return a trained network with training history.
     ----------------------
     Input
     ----------------------
-    train_set_x: Training samples, loaded to GPU by theano.shared()
-    valid_set_x: Test samples, loaded to GPU by theano.shared()
-    train_set_y: Training outputs, loaded to GPU by theano.shared()
-    valid_set_y: Training outputs, loaded to GPU by theano.shared()
-    network: Deep model, the output layer of the network build using lasagne
-    train_fn: theano.function to update the network
-    val_fn: theano.function to calculate validation loss
+    :train_set_x: Training samples, loaded to GPU by theano.shared()
+    :valid_set_x: Test samples, loaded to GPU by theano.shared()
+    :train_set_y: Training outputs, loaded to GPU by theano.shared()
+    :valid_set_y: Training outputs, loaded to GPU by theano.shared()
+    :network: Deep model, the output layer of the network build using lasagne
+    :train_fn: theano.function to update the network
+    :val_fn: theano.function to calculate validation loss
     ----------------------
     Outputs
     ----------------------
@@ -228,16 +204,14 @@ def early_stop_train(train_set_x,train_set_y,
     """
     # network parameters
     n_iter = 20000
-    improvement_threshold = 0.995
-    patience = 10000
-    batch_size = 1024
+    improvement_threshold = 0.999
+    patience = 20000
     n_train_batches = train_set_x.get_value(borrow=True).shape[0] // batch_size + 1
     n_valid_batches = valid_set_x.get_value(borrow=True).shape[0] // batch_size + 1
     patience_increase = 2
     validation_frequency = min(n_train_batches, patience // 10)
     train_loss_history_temp = []
     best_val_loss_ = np.inf
-    best_epoch_ = 0
     epoch = 0
     done_looping = False
     train_loss_history_ = []
@@ -286,7 +260,8 @@ def early_stop_train(train_set_x,train_set_y,
                     best_epoch_ = epoch
                     best_network_params = get_all_param_values(network)
                     # save the best model as pickle file
-                    pickle.dump([best_network_params,best_val_loss_,best_epoch_],
+                    pickle.dump([best_network_params,best_val_loss_,best_epoch_,
+                                 train_loss_history_,val_loss_history_,network],
                                 open("results.p", "wb"))
 
             # check if patience exceeded and set the training loop to stop
@@ -300,13 +275,14 @@ def early_stop_train(train_set_x,train_set_y,
                 done_looping = True
                 break
 
-        freq = 10
+        freq = 1
         if (epoch % freq) == 0:
-            print (('epoch %i, minibatch %i/%i, validation loss of %f, patience %i, in %f secs') %
-                   (epoch, minibatch_index + 1, n_train_batches, current_val_loss, patience, time.time() - start_time))
+            print (('epoch %i, validation loss %f, training loss %f, patience %i, in %f secs') %
+                   (epoch, current_val_loss,train_loss_history_[-1], patience, time.time() - start_time))
             start_time = time.time()
 
     return 0
+
 
 if __name__ == "__main__":
 
@@ -330,7 +306,7 @@ if __name__ == "__main__":
 
     # generate test validation split
     train_set_x, valid_set_x, train_set_y, valid_set_y = train_test_split(
-        data.X, data.y, test_size=0.2, random_state=42)
+        data.X, data.y, test_size=0.2)
     print 'shape of train X', train_set_x.shape, 'and y', train_set_y.shape
     print 'shape of validation X', valid_set_x.shape, 'and y', valid_set_y.shape
 
@@ -363,16 +339,20 @@ if __name__ == "__main__":
     X = T.ftensor4('X')
     y = T.matrix('y')
 
-    net = build_model_vanila_CNN(X=X, stride=1   )
+    batch_size = 64
+
+    net = build_model_vanila_CNN(X=X, stride=1  )
     network = net['prob']
 
     train_fn, val_fn = build_update_functions(train_set_x=train_set_x, train_set_y=train_set_y,
                                               valid_set_x=valid_set_x,valid_set_y= valid_set_y,
                                               y= y,X= X,network=network,
-                                              val_MASK=val_MASK, train_MASK=train_MASK)
+                                              val_MASK=val_MASK, train_MASK=train_MASK,
+                                              batch_size=batch_size)
     print 'compile done successfully'
 
     # call early_stop_train function
     early_stop_train(train_set_x, train_set_y,
                      valid_set_x, valid_set_y,
-                     network, train_fn, val_fn)
+                     network, train_fn, val_fn,
+                     batch_size=batch_size)

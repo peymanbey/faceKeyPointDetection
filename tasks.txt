@@ -12,12 +12,11 @@
           c. DONE Multi-label handling of missing values
           d. Augment the training images by
                 i. Flipping around the vertical axis
-                ii. Shifting up, down, left, right?
-                iii. What else? Search for it
+                ii. Extract random patches smaller size and modify value of output accordingly
           e. Cluster instances, in terms of their annotation type.
           Apparently two different protocol has been used for annotation.
           Maybe using a different estimator for each would help to improve.
-     3. Choose a CNN model, something that is available in pretrained format
+     3. Choose a CNN model, something that is available in pre-trained format
      and use it as feature selector. then:
             a. Apply linear model on the extracted features
             b. Apply random forest on the extracted features

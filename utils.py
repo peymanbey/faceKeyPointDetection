@@ -7,7 +7,7 @@ from lasagne.layers import  set_all_param_values
 
 class data_set(object):
     """
-    Store path to train and test date. Provide preprocessed data
+
     """
     def __init__(self,
                  path_train,
@@ -20,6 +20,7 @@ class data_set(object):
         self._load_data()
 
     def _load_data(self):
+
         """
         Load the training data according to self.PATH_train
         Extract X,y and store in self.X_nan,self.y_nan,including nan values
@@ -62,10 +63,12 @@ class data_set(object):
 
     def center_alexnet(self, X=None):
         """
-        Center X according to the mean image calculated using the training data
-        Input: X, numpy array same number of features as the training data
-        output: X centered according to alexnet mean image
+        Center according to the mean image calculated using the training data
+        Alexnet style
+        :param X: numpy array same number of features as the training data
+        :return: Centered dataset
         """
+
         if X:
             return X - self.meanImageAlex
         else:
@@ -75,9 +78,10 @@ class data_set(object):
 
     def center_VGG(self, X=None):
         """
-        Center X according to the mean value calculated using the training data
-        Input: X, numpy array same number of features as the training data
-        output: X centered according to VGG mean value
+        Center according to the mean image calculated using the training data
+        VGG style
+        :param X: numpy array same number of features as the training data
+        :return: Centered dataset
         """
         if X:
             return X - self.meanImageVGG
@@ -107,8 +111,14 @@ def reinitiate_set_params(network,
         set_all_param_values(network, weights)
         return network
 
+
 def shared_dataset(X,y,borrow=True):
-    """Load data into shared variables
+    """
+
+    :param X: array like to be shared in theano
+    :param y: array like to be shared in theano
+    :param borrow: borrow option of theano.shared
+    :return: shared version of X,y
     """
     shared_x=theano.shared(np.asarray(X,
                                         dtype=theano.config.floatX),
@@ -127,6 +137,23 @@ def build_update_functions(train_set_x, train_set_y,
                            learning_rate=.005,
                            momentum=.9):
 
+    """
+    This is the old one without handling missing values in multi-label way
+    For the new one look into CNN.py
+
+    :param train_set_x:
+    :param train_set_y:
+    :param valid_set_x:
+    :param valid_set_y:
+    :param network:
+    :param y:
+    :param X:
+    :param batch_size:
+    :param l2_reg:
+    :param learning_rate:
+    :param momentum:
+    :return:
+    """
 
     # build update functions
     #####################################
