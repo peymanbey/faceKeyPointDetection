@@ -12,7 +12,7 @@
           c. DONE Multi-label handling of missing values
           d. Augment the training images by
                 i. Flipping around the vertical axis
-                ii. Extract random patches smaller size and modify value of output accordingly
+                ii. Extract random patches with smaller size and modify value of y accordingly
           e. Cluster instances, in terms of their annotation type.
           Apparently two different protocol has been used for annotation.
           Maybe using a different estimator for each would help to improve.
@@ -24,10 +24,11 @@
             d. Fine tune the model to your data
                 i. Use RELU
                 ii. Use leaky-RELU with trainable parameter
-                iii.Batch normalisation
      4. Write the script to predict and generate the submission file
      5. Track the leader board score for each combination of pre-processing
      and estimator
+     6. DONE batch normalisation layer
+     7. Plot intermediate features
  """
 
 # TODO: 2. Implement 4 from "All tasks"

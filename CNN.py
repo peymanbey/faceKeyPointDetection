@@ -21,7 +21,7 @@ def build_update_functions(train_set_x,train_set_y,
                            y,X,
                            train_MASK,val_MASK,
                            batch_size = 32,
-                           l2_reg = .01,
+                           l2_reg = .001,
                            learning_rate = .005,
                            momentum = .9):
 
@@ -169,10 +169,17 @@ def build_model_vanila_CNN(X, stride=1):
                                      nonlinearity=non_linear_function,
                                      flip_filters=False)
 
-    net['fc5'] = DenseLayer(net['conv4'], num_units=256, nonlinearity=non_linear_function)
-    net['fc5_dropout'] = DropoutLayer(net['fc5'], p=0.2)
+    # net['fc5'] = DenseLayer(net['conv4'], num_units=512, nonlinearity=non_linear_function)
+    net['fc5']  = ConvLayer(incoming=net['conv4'],
+                            num_filters=512,
+                            filter_size=1,
+                            stride=1,
+                            pad=0,
+                            nonlinearity=non_linear_function,
+                            flip_filters=False)
+    net['fc5_dropout'] = DropoutLayer(net['fc5'], p=0.1)
 
-    net['fc6'] = DenseLayer(net['fc5_dropout'], num_units=30, nonlinearity=non_linear_function)
+    net['fc6'] = DenseLayer(net['fc5_dropout'], num_units=30, nonlinearity=identity)
 
     net['prob'] = NonlinearityLayer(net['fc6'], nonlinearity=identity)
 
@@ -339,7 +346,7 @@ if __name__ == "__main__":
     X = T.ftensor4('X')
     y = T.matrix('y')
 
-    batch_size = 64
+    batch_size = 32
 
     net = build_model_vanila_CNN(X=X, stride=1  )
     network = net['prob']
