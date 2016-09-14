@@ -12,7 +12,8 @@ from lasagne.updates import rmsprop, adagrad, nesterov_momentum
 from lasagne.layers import  get_output,get_all_params,set_all_param_values, get_all_param_values
 from lasagne.init import GlorotUniform
 import cPickle as pickle
-from skimage.filters import sobel
+from skimage.filters import sobel, sobel_h, sobel_v
+from skimage.exposure import equalize_hist
 
 
 class data_set(object):
@@ -58,6 +59,7 @@ class data_set(object):
         self.X = np.vstack(self.df[col].values).astype(np.float32)
         self.y = self.df[self.df.columns[:-1]].values.astype(np.float32)
 
+    def split_trainval(self):
         # Shuffle the data
         self.X, self.y = shuffle(self.X, self.y, random_state=47)
 
@@ -71,7 +73,7 @@ class data_set(object):
         # self.X = temp.T
         ######################################
         # reshape
-        self.X = self.X.reshape(-1,1,96,96).astype(theano.config.floatX)
+        self.X = self.X.reshape(self.X.shape[0], -1, 96, 96).astype(theano.config.floatX)
         self.y = self.y.astype(theano.config.floatX)
 
         # train validation split
@@ -83,9 +85,8 @@ class data_set(object):
         # calculate mean value pre channel, here ve only have one channel
         self.meanImageVGG = self.X.mean()
 
-
     def augment(self):
-        # augment training data
+        # augment training data only applies to training set
         print 'augmenting the training data \n'
         tempX = np.copy(self.X)
         tempX =  tempX[:, :, :, ::-1]
@@ -148,6 +149,25 @@ class data_set(object):
         # replace images with the output of sobel filter on each image
         self.df['Image'] = self.df['Image'].apply(lambda im: sobel(im.reshape(96, 96)).reshape(-1))
         self._extract_Xy(col='Image')
+        
+    def hist_eqal_image(self):
+        """"Extract histogram equalized images"""
+        self.df['Image'] = self.df['Image'].apply(lambda im: equalize_hist(im.reshape(96, 96)).reshape(-1))
+        self._extract_Xy(col='Image')
+
+    def stack_origi_sobel(self):
+        """stack original image with """
+        df_preproc = pd.DataFrame(self.df['Image'])
+        df_preproc['sobelh'] = df_preproc['Image'].apply(lambda im: sobel_h(im.reshape(96, 96)).reshape(-1))
+        df_preproc['sobelv'] = df_preproc['Image'].apply(lambda im: sobel_v(im.reshape(96, 96)).reshape(-1))
+        col = 'Image'
+        self.X = np.vstack(df_preproc[col].values).reshape(-1,1,96,96)
+        self.y = self.df[self.df.columns[:-1]].values
+        col = 'sobelh'
+        tempx1 = np.vstack(df_preproc[col].values).reshape(-1, 1, 96, 96)
+        col = 'sobelv'
+        tempx2 = np.vstack(df_preproc[col].values).reshape(-1, 1, 96, 96)
+        self.X = np.concatenate((self.X,tempx1,tempx2), axis=1)
 
 
 def reinitiate_set_params(network,
@@ -317,12 +337,12 @@ def early_stop_train(train_set_x,train_set_y,
     """
     # network parameters
     # TODO: for testing hyper parameters, n_iter set to 400
-    n_iter = 400
+    n_iter = 2000
     improvement_threshold = 0.998
     patience = 40000
     n_train_batches = train_set_x.get_value(borrow=True).shape[0] // batch_size + 1
     n_valid_batches = valid_set_x.get_value(borrow=True).shape[0] // batch_size + 1
-    patience_increase = 2
+    patience_increase = .3
     validation_frequency = min(n_train_batches, patience // 10)
     print 'validation_frequency',validation_frequency
     train_loss_history_temp = []
@@ -378,10 +398,10 @@ def early_stop_train(train_set_x,train_set_y,
                     best_network_params = get_all_param_values(network)
 
 
-                # save the best model as pickle file
-                pickle.dump([best_network_params,best_val_loss_,best_epoch_,
-                             train_loss_history_,val_loss_history_,network],
-                            open("results.p", "wb"))
+                    # save the best model as pickle file
+                    pickle.dump([best_network_params,best_val_loss_,best_epoch_,
+                                 train_loss_history_,val_loss_history_,network],
+                                open("results.p", "wb"))
 
             # check if patience exceeded and set the training loop to stop
             if (patience <= num_minibatch_checked):

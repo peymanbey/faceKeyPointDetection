@@ -10,28 +10,115 @@
           a. DONE Exclude samples with missing values
           b. DONE Center the data, note different centering of alexnet and VGG
           c. DONE Multi-label handling of missing values
-          d. Augment the training images by
-                i. Flipping around the vertical axis
-                ii. Extract random patches with smaller size and modify value of y accordingly
+          d. DONE Augment the training images by
+                i. DONE Flipping around the vertical axis
+                ii. Debug Augmentation to figure why it over-fits
+                iii. Elastic transformation
           e. Cluster instances, in terms of their annotation type.
           Apparently two different protocol has been used for annotation.
           Maybe using a different estimator for each would help to improve.
-     3. Choose a CNN model, something that is available in pre-trained format
-     and use it as feature selector. then:
+          g. Stack original and whitened images and sobel
+          h. DONE stack sobel image of x, y axis
+     3. Pre-trained resNet and inception:
             a. Apply linear model on the extracted features
             b. Apply random forest on the extracted features
             c. Apply XGBoost on extracted features
             d. Fine tune the model to your data
-                i. Use RELU
-                ii. Use leaky-RELU with trainable parameter
-     4. Write the script to predict and generate the submission file
-     5. Track the leader board score for each combination of pre-processing
+
+     4. DONE Write the script to predict and generate the submission file
+     5. DONE Track the leader board score for each combination of pre-processing
      and estimator
-     6. DONE batch normalisation layer
-     7. Plot intermediate features
+     6. Plot intermediate features
+     7. Plot results and see if overfitting happens
+     8. Spatial transformer network to handle cluttered images
+        https://github.com/Lasagne/Recipes/blob/master/examples/spatial_transformer_network.ipynb
+     9. Handle the bug in make_submission.py code
+
  """
 
-# TODO: 2. Implement 4 from "All tasks"
-# TODO: 3. Implement 5 from "All tasks"
-# TODO: 4. Implement Batch Normalisation
-# TODO: 5. Check if proper initialization is used for RELU units, it is extension of Xavier
+# TODO: train network on vgg+1FC512, alexnet+1FC512, vgg+2FC512, alexnet+2FC512
+# TODO: 4
+# TODO: 3 resnet, inception3, NIN
+
+"""
+Results
+
+preProc | FC | SIZE | drop | l2 reg | aug | RMSEtrain | RMSEtest | overfeat | epoch | resultsfile | filters
+------------------------------------------------------------------------------------------------------------------
+alex    | 1CV| 500  | 0    | 0.0001 | NO  | 1.0702    | 2.7280   | ???      | 371   |  results1.p | 32,64,128,256
+------------------------------------------------------------------------------------------------------------------
+alex    | 1CV| 500  | 0    | 0.0001 | YES | 2.3300    | 7.9538   | ???      | 135   |  results2.p | 32,64,128,256
+------------------------------------------------------------------------------------------------------------------
+VGG     | 1CV| 500  | 0    | 0.0001 | NO  | 1.0744    | 2.7118   | ???      | 367   |  results3.p | 32,64,128,256
+------------------------------------------------------------------------------------------------------------------
+Non     | 1CV| 500  | 0    | 0.0001 | NO  | 1.1588    | 2.8942   | ???      | 225   |  results4.p | 32,64,128,256
+------------------------------------------------------------------------------------------------------------------
+Non     | 1CV| 500  | 0    | 0.0001 | NO  | 1.0475    | 2.5078   | ???      | 366   |  results5.p | 32,64,128,256
+mean pooling
+------------------------------------------------------------------------------------------------------------------
+VGG     | 1CV| 500  | 0    | 0.0001 | NO  | 1.1054    | 2.4243   | ???      | 273   |  results6.p | 32,64,128,256
+mean pooling                              leader board: 2.56710
+------------------------------------------------------------------------------------------------------------------
+VGG     | 1CV| 500  | .3   | 0.0001 | NO  | 1.2425    | 2.4198   | ???      | 360   |  results7.p | 32,64,128,256
+mean pooling                              leader board: 2.58339
+------------------------------------------------------------------------------------------------------------------
+0meanind| 1CV| 500  | .3   | 0.0001 | NO  | 1.2459    | 2.4724   | ???      | 358   |  results8.p | 32,64,128,256
+mean pooling                              leader board: 2.78064
+------------------------------------------------------------------------------------------------------------------
+VGG     | 2CV| 500  | .3   | 0.0001 | NO  | 1.2905    | 2.5704   | ???      | 389   |  results9.p | 32,64,128,256
+mean pooling                              leader board: 2.7079
+------------------------------------------------------------------------------------------------------------------
+VGG     | 1CV| 500  | .3   | 0.0001 | YES | 3.0475    | 7.5861   | ???      | 79/430|  Not Saved  | 32,64,128,256
+mean pooling                              leader board:
+------------------------------------------------------------------------------------------------------------------
+VGG     | 1CV| 2048 | .5   | 0.0001 | NO  | 1.2910    | 2.5331   | ???      | 826   |  results10.p | 64,64,128,256
+mean pooling                              leader board: 2.68770
+------------------------------------------------------------------------------------------------------------------
+sobel   | 1CV| 500  |  0   | 0.0001 | NO  |  1.2826   | 2.3461   | ???      | 79    |  results11.p | 32,64,128,256
+mean pooling                              leader board: 2.5533
+------------------------------------------------------------------------------------------------------------------
+sobstack| 1CV| 500  |  0   | 0.0001 | NO  |  0.6835   | 2.1835   | ???      | 450   |  results12.p | 64,64,128,256
+mean pooling                              leader board: 2.4257
+------------------------------------------------------------------------------------------------------------------
+"""
+Ensemble      | leader board result
+-------------------------------------
+6,7,10        | 2.41290
+-------------------------------------
+6,7,9,10      | 2.40334
+-------------------------------------
+6,7,9,10,11   | 2.35341
+-------------------------------------
+6,7,9,10,11,12|
+-------------------------------------
+
+"""elastic transform for augmentation
+soource: https://gist.github.com/chsasank/4d8f68caf01f041a6453e67fb30f8f5a
+---------------------------------------------
+
+import numpy as np
+from scipy.ndimage.interpolation import map_coordinates
+from scipy.ndimage.filters import gaussian_filter
+
+def elastic_transform(image, alpha, sigma, random_state=None):
+    """Elastic deformation of images as described in [Simard2003]_.
+    .. [Simard2003] Simard, Steinkraus and Platt, "Best Practices for
+       Convolutional Neural Networks applied to Visual Document Analysis", in
+       Proc. of the International Conference on Document Analysis and
+       Recognition, 2003.
+    """
+    assert len(image.shape)==2
+
+    if random_state is None:
+        random_state = np.random.RandomState(None)
+
+    shape = image.shape
+
+    dx = gaussian_filter((random_state.rand(*shape) * 2 - 1), sigma, mode="constant", cval=0) * alpha
+    dy = gaussian_filter((random_state.rand(*shape) * 2 - 1), sigma, mode="constant", cval=0) * alpha
+
+    x, y = np.meshgrid(np.arange(shape[0]), np.arange(shape[1]), indexing='ij')
+    indices = np.reshape(x+dx, (-1, 1)), np.reshape(y+dy, (-1, 1))
+
+    return map_coordinates(image, indices, order=1).reshape(shape)
+"""

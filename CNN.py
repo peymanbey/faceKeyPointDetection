@@ -11,12 +11,12 @@ import cPickle as pickle
 def single_conv_layer(input_layer, **kwargs):
 
     complex_layer = ConvLayer(incoming=input_layer,**kwargs)
-    complex_layer = PoolLayer(complex_layer, pool_size=2, stride=2, mode='average_exc_pad')
+    # complex_layer = PoolLayer(complex_layer, pool_size=2, stride=2, mode='average_exc_pad')
 
     return complex_layer
 
 
-def build_model_vanila_CNN(X, stride=1):
+def build_model_vanila_CNN(X, channel = 1,stride=1):
     # TODO: set according to daniels guide
     conv1filters = 64
     conv2filters = 64
@@ -27,7 +27,7 @@ def build_model_vanila_CNN(X, stride=1):
     non_linear_function = rectify
 
 
-    net['input'] = InputLayer((None, 1, 96, 96), input_var=X)
+    net['input'] = InputLayer((None, channel, 96, 96), input_var=X)
 
     net['conv1'] = single_conv_layer(net['input'],
                                num_filters=conv1filters,
@@ -45,6 +45,9 @@ def build_model_vanila_CNN(X, stride=1):
                                nonlinearity=non_linear_function,
                                flip_filters=False)
 
+    net['conv2'] = PoolLayer(net['conv2'], pool_size=2, stride=2, mode='average_exc_pad')
+
+
     net['conv3'] = single_conv_layer(net['conv2'],
                                      num_filters=conv3filters,
                                      filter_size=2,
@@ -60,7 +63,7 @@ def build_model_vanila_CNN(X, stride=1):
                                      pad=1,
                                      nonlinearity=non_linear_function,
                                      flip_filters=False)
-
+    net['conv4'] = PoolLayer(net['conv4'], pool_size=2, stride=2, mode='average_exc_pad')
     # net['fc5'] = DenseLayer(net['conv4'], num_units=512, nonlinearity=non_linear_function)
 
     net['fc5']  = ConvLayer(incoming=net['conv4'],
@@ -96,8 +99,8 @@ if __name__ == "__main__":
     print 'loading data \n'
     data = data_set(path_train=PATH_train, path_test=PATH_test)
 
-    print 'sobel image edges'
-    data.sobel_image()
+    print 'sobel stacking image'
+    data.stack_origi_sobel()
 
     # augmentation
     # data.augment()
@@ -110,10 +113,12 @@ if __name__ == "__main__":
 
 
     # generate test validation split
+    data.split_trainval()
     train_set_x = data.X
     valid_set_x = data.X_val
     train_set_y = data.y
     valid_set_y = data.y_val
+    n_ch = train_set_x.shape[1]
 
     print 'shape of train X', train_set_x.shape, 'and y', train_set_y.shape,'\n'
     print 'shape of validation X', valid_set_x.shape, 'and y', valid_set_y.shape, '\n'
@@ -153,7 +158,7 @@ if __name__ == "__main__":
     # X = get_all_layers(network)[0].input_var
     #####################################################
     #  New run
-    net = build_model_vanila_CNN(X=X, stride=1  )
+    net = build_model_vanila_CNN(X=X, channel= n_ch, stride=1  )
     network = net['prob']
     #####################################################
 
