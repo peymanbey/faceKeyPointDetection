@@ -1,6 +1,7 @@
 from utils import data_set, shared_dataset, build_update_functions, early_stop_train
 import numpy as np
-from lasagne.layers import InputLayer, DenseLayer, NonlinearityLayer, DropoutLayer, get_all_layers
+from lasagne.layers import InputLayer, DenseLayer, NonlinearityLayer, count_params
+from lasagne.layers import  DropoutLayer, get_all_layers, batch_norm, ElemwiseSumLayer
 from lasagne.layers import Pool2DLayer as PoolLayer
 from lasagne.layers.dnn import Conv2DDNNLayer as ConvLayer
 from lasagne.nonlinearities import identity, rectify
@@ -89,6 +90,49 @@ def build_model_vanila_CNN(X, channel = 1,stride=1):
 
     return net
 
+
+def build_CNN_nopool(in_shape,
+                     num_filter,
+                     fil_size,
+                     strides,
+                     num_out,
+                     nlin_func=rectify,
+                     in_var=None):
+
+    # build a CNN
+    net = InputLayer(input_var=in_var,
+                     shape=in_shape)
+
+    for i in xrange(len(fil_size)):
+        net = batch_norm(ConvLayer(net,
+                                   num_filters=num_filter[i],
+                                   filter_size=fil_size[i],
+                                   stride=strides[i],
+                                   pad=1,
+                                   nonlinearity=nlin_func,
+                                   flip_filters=False))
+
+    net = DenseLayer(incoming=net,
+                     num_units=num_out,
+                     nonlinearity=identity)
+
+    return net
+
+
+#def resnet_base(net,
+#                n_f,
+#                f_size,
+#                strides,
+#                num_out,
+#                nlin_func=rectify,
+#                in_var=None):
+#                    
+#    temp = ConvLayer(net, num_filters=n_f, filter_size=3, stride=1, pad=1, nonlinearity=identity, flip_filters=False )
+#    temp = ConvLayer(temp, num_filters=n_f, filter_size=1, stride=1, pad=0, nonlinearity=identity, flip_filters=False )
+#    
+#    
+#    return net
+                
 if __name__ == "__main__":
 
     # path to train and testing data
@@ -110,7 +154,6 @@ if __name__ == "__main__":
     # data.center_alexnet()
     # print 'center Xs VGG Style, X doesnt have missing values \n'
     # data.center_VGG()
-
 
     # generate test validation split
     data.split_trainval()
@@ -142,12 +185,12 @@ if __name__ == "__main__":
     valid_set_x, valid_set_y = shared_dataset(valid_set_x, valid_set_y)
     val_MASK, train_MASK = shared_dataset(val_MASK, train_MASK)
 
-
     X = T.ftensor4('X')
     y = T.matrix('y')
 
-    batch_size = 16
-    l2 = .0001
+    batch_size = 32
+    l2 = .0002
+    learn_rate = 1e-3
 
     #####################################################
     # # Continue a previous run
@@ -157,16 +200,27 @@ if __name__ == "__main__":
     # print 'extract input var \n'
     # X = get_all_layers(network)[0].input_var
     #####################################################
-    #  New run
-    net = build_model_vanila_CNN(X=X, channel= n_ch, stride=1  )
-    network = net['prob']
+#    #  VGG run
+#    net = build_model_vanila_CNN(X=X, channel= n_ch, stride=1  )
+#    network = net['prob']
     #####################################################
+    # FULLCCN run
+    network = build_CNN_nopool(in_shape = (None, n_ch,96,96),
+                               num_filter = [64,64,128,128,128,128],
+                               fil_size   = [ 3,  1, 3,  3,  3, 12],
+                               strides =    [ 1,  1, 2,  2,  2,  1],
+                               num_out = 30,
+                               nlin_func=rectify,
+                               in_var=X)
+    print "num_params", count_params(network)
+    #####################################################
+
 
     train_fn, val_fn = build_update_functions(train_set_x=train_set_x, train_set_y=train_set_y,
                                               valid_set_x=valid_set_x,valid_set_y= valid_set_y,
                                               y= y,X= X,network=network,
                                               val_MASK=val_MASK, train_MASK=train_MASK,
-                                              batch_size=batch_size,l2_reg=l2)
+                                              learning_rate=learn_rate,batch_size=batch_size,l2_reg=l2)
     print 'compile done successfully \n'
 
     # call early_stop_train function

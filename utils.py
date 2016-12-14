@@ -61,7 +61,7 @@ class data_set(object):
 
     def split_trainval(self):
         # Shuffle the data
-        self.X, self.y = shuffle(self.X, self.y, random_state=47)
+        self.X, self.y = shuffle(self.X, self.y)
 
         #######################################
         # # scale inputs
@@ -246,7 +246,7 @@ def build_update_functions(train_set_x, train_set_y,
     l2_penalty = regularize_network_params(network, l2)
     loss = (1 - l2_reg) * loss_RMSE + l2_reg * l2_penalty
     # get network params
-    params = get_all_params(network)
+    params = get_all_params(network, trainable = True)
 
     #     # create update criterion
     # print('nestrov')
@@ -256,7 +256,7 @@ def build_update_functions(train_set_x, train_set_y,
     # updates = adagrad(loss, params,learning_rate= 1e-2)
     #
     print('RMSPROP \n')
-    updates = rmsprop(loss, params, learning_rate=1e-3)
+    updates = rmsprop(loss, params, learning_rate=learning_rate)
     # create validation/test loss expression
     # the loss represents the loss for all the labels
     test_prediction = get_output(network, deterministic=True)
@@ -342,7 +342,7 @@ def early_stop_train(train_set_x,train_set_y,
     patience = 40000
     n_train_batches = train_set_x.get_value(borrow=True).shape[0] // batch_size + 1
     n_valid_batches = valid_set_x.get_value(borrow=True).shape[0] // batch_size + 1
-    patience_increase = .3
+    patience_increase = 1.3
     validation_frequency = min(n_train_batches, patience // 10)
     print 'validation_frequency',validation_frequency
     train_loss_history_temp = []
@@ -399,7 +399,7 @@ def early_stop_train(train_set_x,train_set_y,
 
 
                     # save the best model as pickle file
-                    pickle.dump([best_network_params,best_val_loss_,best_epoch_,
+                    pickle.dump([best_val_loss_,best_epoch_,
                                  train_loss_history_,val_loss_history_,network],
                                 open("results.p", "wb"))
 
@@ -416,8 +416,8 @@ def early_stop_train(train_set_x,train_set_y,
 
         freq = 1
         if (epoch % freq) == 0:
-            print (('epoch %i, validation loss %f, training loss %f, patience %i, in %f secs \n') %
-                   (epoch, current_val_loss,train_loss_history_[-1], patience, time.time() - start_time))
+            print (('epoch %i, val_loss %f, train_loss %f, best_val_los %f, patience %i,%f secs\n') %
+                   (epoch, current_val_loss,train_loss_history_[-1], best_val_loss_,patience, time.time() - start_time))
             start_time = time.time()
 
     return 0
